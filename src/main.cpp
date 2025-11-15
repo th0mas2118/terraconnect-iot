@@ -1,11 +1,27 @@
 #include <Arduino.h>
 #include <WiFi.h>
-#include <ESP32Ping.h>
 #include "secrets.h"
 #include "services/dht/DHTService.h"
+#include "services/mqtt/MQTTService.h"
 
-// Instance du service DHT
+// Instances des services
 DHTService dhtService(DHT_PIN);
+MQTTService mqttService(MQTT_SERVER, MQTT_PORT, MQTT_USER, MQTT_PASSWORD, DEVICE_ID);
+
+// Callback pour les messages MQTT reçus
+void mqttCallback(char* topic, byte* payload, unsigned int length) {
+  Serial.print("[MQTT] 📥 Message reçu [");
+  Serial.print(topic);
+  Serial.print("]: ");
+  
+  String message = "";
+  for (unsigned int i = 0; i < length; i++) {
+    message += (char)payload[i];
+  }
+  Serial.println(message);
+  
+  // TODO: Gérer les commandes (relay control, etc.)
+}
 
 // ============================================
 // 📡 Connexion WiFi
@@ -29,38 +45,11 @@ void connectWiFi() {
     Serial.println("\n[WiFi] ✅ Connecté!");
     Serial.print("[WiFi] IP: ");
     Serial.println(WiFi.localIP());
-    Serial.print("[WiFi] Gateway: ");
-    Serial.println(WiFi.gatewayIP());
     Serial.print("[WiFi] Signal: ");
     Serial.print(WiFi.RSSI());
     Serial.println(" dBm");
   } else {
     Serial.println("\n[WiFi] ❌ Échec de connexion");
-  }
-}
-
-// ============================================
-// 🌐 Test Ping Simple
-// ============================================
-void testPing() {
-  Serial.println("\n[Ping] Test de connectivité...");
-
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("❌ WiFi non connecté");
-    return;
-  }
-
-  // Ping Google DNS
-  IPAddress googleDNS(8, 8, 8, 8);
-  Serial.print("[Ping] Test 8.8.8.8... ");
-
-  if (Ping.ping(googleDNS, 3)) {
-    Serial.println("✅ OK");
-    Serial.print("[Ping] Temps de réponse: ");
-    Serial.print(Ping.averageTime());
-    Serial.println(" ms");
-  } else {
-    Serial.println("❌ ÉCHEC");
   }
 }
 
@@ -72,56 +61,55 @@ void setup() {
   delay(2000);
 
   Serial.println("\n╔════════════════════════════════════╗");
-  Serial.println("║  ESP32 - WiFi + Ping + DHT11      ║");
+  Serial.println("║  ESP32 - DHT11 + MQTT             ║");
   Serial.println("╚════════════════════════════════════╝");
 
-  // Initialiser le capteur DHT
-  dhtService.begin();
-
+  // WiFi
   connectWiFi();
 
+  // DHT11
+  dhtService.begin();
+
+  // MQTT
   if (WiFi.status() == WL_CONNECTED) {
-    delay(1000);
-    testPing();
+    mqttService.begin();
+    mqttService.setCallback(mqttCallback);
   }
 
-  // Première lecture du capteur DHT
-  Serial.println("\n[DHT] Première lecture...");
-  if (dhtService.readSensor()) {
-    dhtService.printData();
-  }
+  Serial.println("\n[Setup] ✅ Initialisation terminée\n");
 }
 
 // ============================================
 // 🔄 Loop
 // ============================================
 void loop() {
-  static unsigned long lastPingTest = 0;
   static unsigned long lastDHTRead = 0;
 
-  // Ping toutes les 30 secondes
-//   if (millis() - lastPingTest > 30000) {
-//     Serial.println("\n[Auto-Test] Ping toutes les 30s...");
+  // Maintenir la connexion MQTT
+  mqttService.loop();
 
-//     if (WiFi.status() == WL_CONNECTED) {
-//       testPing();
-//     } else {
-//       Serial.println("⚠️  WiFi déconnecté - Reconnexion...");
-//       connectWiFi();
-//     }
-
-//     lastPingTest = millis();
-//   }
-
-  // Lecture DHT toutes les 10 secondes
+  // Lecture DHT + Publication MQTT toutes les 10 secondes
   if (millis() - lastDHTRead > 10000) {
     Serial.println("\n[DHT] Lecture du capteur...");
+    
     if (dhtService.readSensor()) {
+      float temp = dhtService.getTemperature();
+      float hum = dhtService.getHumidity();
+      
+      // Affichage local
       dhtService.printData();
+      
+      // Publication MQTT si connecté
+      if (mqttService.isConnected()) {
+        mqttService.publishTemperature(temp);
+        mqttService.publishHumidity(hum);
+      } else {
+        Serial.println("[MQTT] ⚠️  Non connecté, données non publiées");
+      }
     }
 
     lastDHTRead = millis();
   }
 
-  delay(1000);
+  delay(100);
 }
