@@ -6,9 +6,7 @@
 
 class DHTService {
 private:
-    DHT* dht;
-    uint8_t pin;
-    uint8_t type;
+    DHT dht;
     float lastTemperature;
     float lastHumidity;
     unsigned long lastReadTime;
@@ -16,7 +14,6 @@ private:
 
 public:
     DHTService(uint8_t pin, uint8_t type = DHT11);
-    ~DHTService();
 
     void begin();
     bool readSensor();

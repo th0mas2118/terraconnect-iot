@@ -1,20 +1,11 @@
 #include "DHTService.h"
 
-DHTService::DHTService(uint8_t pin, uint8_t type) {
-    this->pin = pin;
-    this->type = type;
-    this->dht = new DHT(pin, type);
-    this->lastTemperature = 0.0;
-    this->lastHumidity = 0.0;
-    this->lastReadTime = 0;
-}
-
-DHTService::~DHTService() {
-    delete dht;
+DHTService::DHTService(uint8_t pin, uint8_t type)
+    : dht(pin, type), lastTemperature(0.0), lastHumidity(0.0), lastReadTime(0) {
 }
 
 void DHTService::begin() {
-    dht->begin();
+    dht.begin();
     Serial.println("[DHT] Capteur initialisé");
     delay(2000); // Attendre que le capteur se stabilise
 }
@@ -26,8 +17,8 @@ bool DHTService::readSensor() {
         return true; // Retourner les dernières valeurs
     }
 
-    float h = dht->readHumidity();
-    float t = dht->readTemperature();
+    float h = dht.readHumidity();
+    float t = dht.readTemperature();
 
     // Vérifier si la lecture a échoué
     if (isnan(h) || isnan(t)) {
@@ -51,21 +42,10 @@ float DHTService::getHumidity() {
 }
 
 float DHTService::getHeatIndex() {
-    return dht->computeHeatIndex(lastTemperature, lastHumidity, false);
+    return dht.computeHeatIndex(lastTemperature, lastHumidity, false);
 }
 
 void DHTService::printData() {
-    Serial.println("\n========================================");
-    Serial.println("       DONNÉES CAPTEUR DHT11");
-    Serial.println("========================================");
-    Serial.print("Température: ");
-    Serial.print(lastTemperature);
-    Serial.println(" °C");
-    Serial.print("Humidité: ");
-    Serial.print(lastHumidity);
-    Serial.println(" %");
-    Serial.print("Indice de chaleur: ");
-    Serial.print(getHeatIndex());
-    Serial.println(" °C");
-    Serial.println("========================================\n");
+    Serial.printf("[DHT] %.1f°C, %.1f%%, Indice: %.1f°C\n",
+                  lastTemperature, lastHumidity, getHeatIndex());
 }
